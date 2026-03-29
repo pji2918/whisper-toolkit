@@ -1,4 +1,3 @@
-from whisper.model import Whisper
 import argparse
 import json
 import os
@@ -11,6 +10,7 @@ import whisper
 import whisper.utils
 from tqdm import TqdmExperimentalWarning
 from tqdm.rich import tqdm
+from whisper.model import Whisper
 
 
 def get_args() -> argparse.Namespace:
