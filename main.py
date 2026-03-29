@@ -1,14 +1,15 @@
+import argparse
+import json
+import os
 import time
+import warnings
+from pathlib import Path
+
 import torch
-from tqdm.rich import tqdm
 import whisper
 import whisper.utils
-import os
-import json
-import warnings
-import argparse
-from pathlib import Path
 from tqdm import TqdmExperimentalWarning
+from tqdm.rich import tqdm
 
 
 def main():
