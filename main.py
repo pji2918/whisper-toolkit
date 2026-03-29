@@ -27,7 +27,7 @@ def main():
         )
 
         with open(
-            os.path.join("outputs", "json", f"opt{idx + 1}.txt"),
+            os.path.join("outputs", "json", f"opt{idx + 1}.json"),
             mode="w",
             encoding="utf8",
         ) as f:
