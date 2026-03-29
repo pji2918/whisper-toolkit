@@ -12,6 +12,5 @@ wheels/
 inputs/*
 !inputs/README.txt
 
-outputs/json/*
-outputs/srt/*
+outputs/*/*
 !outputs/**/README.txt
