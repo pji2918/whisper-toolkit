@@ -1,3 +1,4 @@
+import time
 import torch
 from tqdm.rich import tqdm
 import whisper
@@ -46,6 +47,7 @@ def main():
 
     for idx, filePath in enumerate(tqdm(flist, position=1)):
         print(f"Running inference for {filePath.name}... ({idx + 1}/{len(flist)})")
+        startTime = time.perf_counter()
         result = model.transcribe(str(filePath.resolve()), verbose=False)
 
         with open(
@@ -61,6 +63,9 @@ def main():
             os.path.join("outputs", "srt"),
         )
         writer(result, filePath, {})
+        print(
+            f"File {idx + 1} processing completed. took {time.perf_counter() - startTime:.2f}s"
+        )
 
 
 if __name__ == "__main__":
