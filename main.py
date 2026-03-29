@@ -21,6 +21,12 @@ def main():
         "-o", "--output", help="Specifies output folder.", default="outputs"
     )
     parser.add_argument(
+        "-m",
+        "--model",
+        help="Specifies which model used for inference.",
+        default="turbo",
+    )
+    parser.add_argument(
         "-d",
         "--device",
         help="Specifies which device used for inference.",
@@ -36,7 +42,7 @@ def main():
     dev = torch.device(args.device)
 
     print("Configuring model...", end=" ")
-    model = whisper.load_model("turbo", device=dev)
+    model = whisper.load_model(args.model, device=dev)
 
     for idx, filePath in enumerate(tqdm(flist, position=1)):
         print(f"Running inference for {filePath.name}... ({idx + 1}/{len(flist)})")
