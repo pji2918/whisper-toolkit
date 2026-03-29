@@ -10,5 +10,8 @@ wheels/
 .venv
 
 inputs/*
+!inputs/README.txt
+
 outputs/json/*
 outputs/srt/*
+!outputs/**/README.txt
