@@ -31,9 +31,20 @@ def get_args() -> argparse.Namespace:
         "-d",
         "--device",
         help="Specifies which device used for inference.",
-        default="cpu",
+        default="auto",
     )
     return parser.parse_args()
+
+
+def get_available_device() -> torch.device:
+    dev = str()
+    if torch.cuda.is_available():
+        dev = "cuda"
+    elif torch.backends.mps.is_available():
+        dev = "mps"
+    else:
+        dev = "cpu"
+    return torch.device(dev)
 
 
 def main():
@@ -44,7 +55,12 @@ def main():
         f for f in Path("./inputs").iterdir() if f.is_file() and "README" not in f.name
     ]
 
-    dev = torch.device(args.device)
+    dev: torch.device = torch.device("cpu")
+
+    if args.device == "auto":
+        dev = get_available_device()
+    else:
+        dev = torch.device(args.device)
 
     print("Configuring model...", end=" ")
     model: Whisper = whisper.load_model(args.model, device=dev)
