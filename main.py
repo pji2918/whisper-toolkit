@@ -18,7 +18,8 @@ def get_args() -> argparse.Namespace:
     Returns arguments that used when launching program.
 
     Returns:
-    argparse.Namespace containing input: str, output: str, model: str, device: str.
+    argparse.Namespace containing:
+    input: str, output: str, model: str, device: str.
     """
     parser = argparse.ArgumentParser(description="A wrapper for OpenAI Whisper.")
     parser.add_argument(
@@ -47,7 +48,15 @@ def get_available_device() -> torch.device:
     Returns suitable torch.device for current hardware.
 
     Returns:
-    torch.device
+        torch.device: pytorch-ready device.
+
+    Examples:
+    >>> get_available_device() # When using NVIDIA, AMD GPU
+        device(type='cuda')
+    >>> get_available_device() # When using Apple Silicon
+        device(type='mps')
+    >>> get_available_device() # When GPU is unavailable
+        device(type='cpu')
     """
     dev = str()
     if torch.cuda.is_available():
@@ -59,7 +68,7 @@ def get_available_device() -> torch.device:
     return torch.device(dev)
 
 
-def main():
+def main() -> None:
     """
     Entrypoint for this python code.
     """
