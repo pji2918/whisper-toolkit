@@ -79,8 +79,6 @@ def main() -> None:
         f for f in Path("./inputs").iterdir() if f.is_file() and "README" not in f.name
     ]
 
-    dev: torch.device = torch.device("cpu")
-
     if args.device == "auto":
         dev = get_available_device()
     else:
