@@ -12,15 +12,14 @@ from tqdm import TqdmExperimentalWarning
 from tqdm.rich import tqdm
 from whisper.model import Whisper
 
-"""
-Returns arguments that used when launching program.
-
-Returns:
-argparse.Namespace containing input: str, output: str, model: str, device: str.
-"""
-
 
 def get_args() -> argparse.Namespace:
+    """
+    Returns arguments that used when launching program.
+
+    Returns:
+    argparse.Namespace containing input: str, output: str, model: str, device: str.
+    """
     parser = argparse.ArgumentParser(description="A wrapper for OpenAI Whisper.")
     parser.add_argument(
         "-i", "--input", help="Specifies input folder.", default="inputs"
@@ -43,15 +42,13 @@ def get_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-"""
-Returns suitable torch.device for current hardware.
-
-Returns:
-torch.device
-"""
-
-
 def get_available_device() -> torch.device:
+    """
+    Returns suitable torch.device for current hardware.
+
+    Returns:
+    torch.device
+    """
     dev = str()
     if torch.cuda.is_available():
         dev = "cuda"
@@ -62,12 +59,10 @@ def get_available_device() -> torch.device:
     return torch.device(dev)
 
 
-"""
-Entrypoint for this python code.
-"""
-
-
 def main():
+    """
+    Entrypoint for this python code.
+    """
     warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
     args: argparse.Namespace = get_args()
 
