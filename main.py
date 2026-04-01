@@ -70,7 +70,7 @@ def get_available_device() -> torch.device:
 
 def main() -> None:
     """
-    Entrypoint for this python code.
+    Entrypoint of this python code.
     """
     warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
     args: argparse.Namespace = get_args()
