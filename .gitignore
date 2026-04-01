@@ -9,8 +9,15 @@ wheels/
 # Virtual environments
 .venv
 
-inputs/*
-!inputs/README.txt
+# Program-generated files
+inputs/
+outputs/
 
-outputs/*/*
-!outputs/**/README.txt
+# Media files
+*.mkv
+*.webm
+*.mp4
+*.mp3
+*.opus
+*.aac
+*.m4a
