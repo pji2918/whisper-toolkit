@@ -78,57 +78,61 @@ def get_available_device() -> torch.device:
 
 
 def main() -> None:
-    try:
-        """
-        Entrypoint of this python code.
-        """
-        warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
-        args: argparse.Namespace = get_args()
+    """
+    Entrypoint of this python code.
+    """
+    warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
+    args: argparse.Namespace = get_args()
+    process(input=args.input, output=args.output, device=args.device, model=args.model)
 
-        flist: list[Path] = []
 
-        for f in args.input:
-            if Path(f).is_dir():
-                for i in Path(f).iterdir():
-                    if i.is_file() and "README" not in i.name:
-                        flist.append(i)
-            elif Path(f).is_file():
-                flist.append(Path(f))
+def process(
+    input: tuple[str] = ("inputs",),
+    output: str = "outputs",
+    device: str = "auto",
+    model: str = "turbo",
+):
+    flist: list[Path] = []
+    for f in input:
+        if Path(f).is_dir():
+            for i in Path(f).iterdir():
+                if i.is_file() and "README" not in i.name:
+                    flist.append(i)
+        elif Path(f).is_file():
+            flist.append(Path(f))
 
-        Path(args.output).joinpath("json").mkdir(exist_ok=True, parents=True)
-        Path(args.output).joinpath("srt").mkdir(exist_ok=True, parents=True)
+    Path(output).joinpath("json").mkdir(exist_ok=True, parents=True)
+    Path(output).joinpath("srt").mkdir(exist_ok=True, parents=True)
 
-        if args.device == "auto":
-            dev: torch.device = get_available_device()
-        else:
-            dev = torch.device(args.device)
+    if device == "auto":
+        dev: torch.device = get_available_device()
+    else:
+        dev = torch.device(device)
 
-        print(f"Configuring model with {dev.type}...")
-        model: Whisper = whisper.load_model(args.model, device=dev)
+    print(f"Configuring model with {dev.type}...")
+    model: Whisper = whisper.load_model(model, device=dev)
 
-        for idx, filePath in enumerate(tqdm(flist, position=1)):
-            print(f"Running inference for {filePath.name}... ({idx + 1}/{len(flist)})")
-            startTime: float = time.perf_counter()
-            result = model.transcribe(str(filePath.resolve()), verbose=False)
+    for idx, filePath in enumerate(tqdm(flist, position=1)):
+        print(f"Running inference for {filePath.name}... ({idx + 1}/{len(flist)})")
+        startTime: float = time.perf_counter()
+        result = model.transcribe(str(filePath.resolve()), verbose=False)
 
-            with open(
-                os.path.join("outputs", "json", f"opt{idx + 1}.json"),
-                mode="w",
-                encoding="utf8",
-            ) as f:
-                json_str: str = json.dumps(result, indent=4, ensure_ascii=False)
-                f.write(json_str)
+        with open(
+            os.path.join("outputs", "json", f"opt{idx + 1}.json"),
+            mode="w",
+            encoding="utf8",
+        ) as f:
+            json_str: str = json.dumps(result, indent=4, ensure_ascii=False)
+            f.write(json_str)
 
-            writer = whisper.utils.get_writer(
-                "srt",
-                os.path.join("outputs", "srt"),
-            )
-            writer(result, filePath, {})
-            print(
-                f"File {idx + 1} processing completed. took {time.perf_counter() - startTime:.2f}s"
-            )
-    except Exception as e:
-        print(e)
+        writer = whisper.utils.get_writer(
+            "srt",
+            os.path.join("outputs", "srt"),
+        )
+        writer(result, filePath, {})
+        print(
+            f"File {idx + 1} processing completed. took {time.perf_counter() - startTime:.2f}s"
+        )
 
 
 if __name__ == "__main__":
