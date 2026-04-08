@@ -6,6 +6,8 @@ import os
 import time
 import warnings
 from pathlib import Path
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 import whisper
@@ -91,7 +93,15 @@ def process(
     output: str = "outputs",
     device: str = "auto",
     model: str = "turbo",
-):
+    log_callback: Optional[Callable[[str], None]] = None,
+    progress_callback: Optional[Callable[[int, int, Path], None]] = None,
+    file_status_callback: Optional[Callable[[str, int, int, Path], None]] = None,
+) -> int:
+    def emit_log(message: str) -> None:
+        print(message)
+        if log_callback is not None:
+            log_callback(message)
+
     flist: list[Path] = []
     for f in input:
         if Path(f).is_dir():
@@ -101,6 +111,10 @@ def process(
         elif Path(f).is_file():
             flist.append(Path(f))
 
+    if not flist:
+        emit_log("처리할 입력 파일이 없습니다.")
+        return 1
+
     Path(output).joinpath("json").mkdir(exist_ok=True, parents=True)
     Path(output).joinpath("srt").mkdir(exist_ok=True, parents=True)
 
@@ -109,16 +123,20 @@ def process(
     else:
         dev = torch.device(device)
 
-    print(f"Configuring model with {dev.type}...")
-    model: Whisper = whisper.load_model(model, device=dev)
+    emit_log(f"Configuring model with {dev.type}...")
+    whisper_model: Whisper = whisper.load_model(model, device=dev)
 
-    for idx, filePath in enumerate(tqdm(flist, position=1)):
-        print(f"Running inference for {filePath.name}... ({idx + 1}/{len(flist)})")
+    total_files = len(flist)
+    for idx, filePath in enumerate(tqdm(flist, position=1), start=1):
+        if file_status_callback is not None:
+            file_status_callback("start", idx, total_files, filePath)
+
+        emit_log(f"Running inference for {filePath.name}... ({idx}/{total_files})")
         startTime: float = time.perf_counter()
-        result = model.transcribe(str(filePath.resolve()), verbose=False)
+        result = whisper_model.transcribe(str(filePath.resolve()), verbose=False)
 
         with open(
-            os.path.join("outputs", "json", f"opt{idx + 1}.json"),
+            os.path.join(output, "json", f"opt{idx}.json"),
             mode="w",
             encoding="utf8",
         ) as f:
@@ -127,12 +145,18 @@ def process(
 
         writer = whisper.utils.get_writer(
             "srt",
-            os.path.join("outputs", "srt"),
+            os.path.join(output, "srt"),
         )
         writer(result, filePath, {})
-        print(
-            f"File {idx + 1} processing completed. took {time.perf_counter() - startTime:.2f}s"
+        emit_log(
+            f"File {idx} processing completed. took {time.perf_counter() - startTime:.2f}s"
         )
+        if file_status_callback is not None:
+            file_status_callback("done", idx, total_files, filePath)
+        if progress_callback is not None:
+            progress_callback(idx, total_files, filePath)
+
+    return 0
 
 
 if __name__ == "__main__":

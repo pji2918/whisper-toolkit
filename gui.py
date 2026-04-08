@@ -1,5 +1,10 @@
 import tkinter as tk
+import traceback
+from queue import Empty, Queue
+from threading import Thread
 from tkinter import filedialog, scrolledtext, ttk
+
+from main import process
 
 
 class WhisperToolkitGUI:
@@ -10,11 +15,14 @@ class WhisperToolkitGUI:
         self.root.minsize(760, 480)
 
         self.input_path = tk.StringVar()
-        self.output_path = tk.StringVar()
-        self.progress_value = tk.IntVar(value=0)
+        self.output_path = tk.StringVar(value="outputs")
+        self.file_progress_value = tk.IntVar(value=0)
+        self.total_progress_value = tk.IntVar(value=0)
         self.is_running = False
+        self.ui_queue: Queue[tuple[str, tuple]] = Queue()
 
         self._build_ui()
+        self._poll_ui_queue()
 
     def _build_ui(self) -> None:
         container = ttk.Frame(self.root, padding=16)
@@ -45,16 +53,18 @@ class WhisperToolkitGUI:
         progress_frame = ttk.LabelFrame(container, text="Progress", padding=12)
         progress_frame.pack(fill="x", pady=(0, 10))
 
-        self.progressbar = ttk.Progressbar(
+        total_progress_label = ttk.Label(progress_frame, text="전체 진행률")
+        total_progress_label.pack(anchor="w", pady=(8, 0))
+
+        self.total_progressbar = ttk.Progressbar(
             progress_frame,
-            variable=self.progress_value,
+            variable=self.total_progress_value,
             mode="determinate",
             maximum=100,
         )
-        self.progressbar.pack(fill="x")
-
-        self.progress_label = ttk.Label(progress_frame, text="0%")
-        self.progress_label.pack(anchor="e", pady=(6, 0))
+        self.total_progressbar.pack(fill="x")
+        self.total_progress_label = ttk.Label(progress_frame, text="0%")
+        self.total_progress_label.pack(anchor="e", pady=(6, 0))
 
         button_frame = ttk.Frame(container)
         button_frame.pack(fill="x", pady=(0, 10))
@@ -83,7 +93,7 @@ class WhisperToolkitGUI:
         file_path = filedialog.askopenfilename(
             title="입력 파일 선택",
             filetypes=[
-                ("Audio/Video", "*.wav *.mp3 *.m4a *.flac *.mp4 *.mkv"),
+                ("Audio/Video", "*.wav *.mp3 *.m4a *.flac *.mp4 *.mkv *.webm"),
                 ("All Files", "*.*"),
             ],
         )
@@ -124,27 +134,87 @@ class WhisperToolkitGUI:
 
         self.is_running = True
         self.start_button.configure(state="disabled")
-        self.progress_value.set(0)
-        self.progress_label.configure(text="0%")
+        self._set_file_progress(0)
+        self._set_total_progress(0)
 
         self.add_log("작업을 시작합니다.")
-        self._run_progress_step()
+        worker = Thread(target=self._run_process_worker, daemon=True)
+        worker.start()
 
-    def _run_progress_step(self) -> None:
-        value = self.progress_value.get()
-        if value >= 100:
-            self.progress_label.configure(text="100%")
-            self.add_log("작업이 완료되었습니다.")
-            self.start_button.configure(state="normal")
-            self.is_running = False
+    def _run_process_worker(self) -> None:
+        try:
+            processed_count = process(
+                input=(self.input_path.get().strip(),),
+                output=self.output_path.get().strip(),
+                log_callback=self._log_from_worker,
+                progress_callback=self._progress_from_worker,
+                file_status_callback=self._file_status_from_worker,
+            )
+            self.ui_queue.put(("done", (processed_count,)))
+        except Exception as expt:
+            error_trace = traceback.format_exc()
+            self.ui_queue.put(("error", (expt, error_trace)))
+
+    def _progress_from_worker(self, done: int, total: int, _file_path: object) -> None:
+        if total <= 0:
             return
 
-        next_value = value + 5
-        self.progress_value.set(next_value)
-        self.progress_label.configure(text=f"{next_value}%")
-        self.add_log(f"진행률: {next_value}%")
+        percent = int((done / total) * 100)
+        self.ui_queue.put(("total_progress", (percent,)))
 
-        self.root.after(150, self._run_progress_step)
+    def _file_status_from_worker(
+        self, status: str, done: int, total: int, file_path: object
+    ) -> None:
+        self.ui_queue.put(("file_status", (status, done, total, str(file_path))))
+
+    def _log_from_worker(self, message: str) -> None:
+        self.ui_queue.put(("log", (message,)))
+
+    def _set_file_progress(self, percent: int) -> None:
+        bounded = max(0, min(100, percent))
+        self.file_progress_value.set(bounded)
+
+    def _set_total_progress(self, percent: int) -> None:
+        bounded = max(0, min(100, percent))
+        self.total_progress_value.set(bounded)
+        self.total_progress_label.configure(text=f"{bounded}%")
+
+    def _finish_process(self, processed_count: int) -> None:
+        self._set_file_progress(100 if processed_count > 0 else 0)
+        self._set_total_progress(100)
+        self.add_log("작업이 완료되었습니다.")
+        self.start_button.configure(state="normal")
+        self.is_running = False
+
+    def _handle_worker_error(self, exc: Exception, error_trace: str) -> None:
+        self.add_log(f"오류 발생: {exc}")
+        self.add_log(error_trace)
+        self.start_button.configure(state="normal")
+        self.is_running = False
+
+    def _poll_ui_queue(self) -> None:
+        try:
+            while True:
+                event, payload = self.ui_queue.get_nowait()
+                if event == "log":
+                    self.add_log(payload[0])
+                elif event == "total_progress":
+                    self._set_total_progress(payload[0])
+                elif event == "file_status":
+                    status, done, total, file_name = payload
+                    if status == "start":
+                        self._set_file_progress(0)
+                        self.add_log(f"파일 시작: {file_name} ({done}/{total})")
+                    elif status == "done":
+                        self._set_file_progress(100)
+                elif event == "done":
+                    self._finish_process(payload[0])
+                elif event == "error":
+                    self._handle_worker_error(payload[0], payload[1])
+        except Empty:
+            pass
+
+        self.root.after(100, self._poll_ui_queue)
 
 
 def main() -> None:
