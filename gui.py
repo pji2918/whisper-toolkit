@@ -1,30 +1,44 @@
 import tkinter as tk
 import traceback
+from pathlib import Path
 from queue import Empty, Queue
 from threading import Thread
 from tkinter import filedialog, scrolledtext, ttk
+from typing import cast
 
 from main import process
 
 
 class WhisperToolkitGUI:
+    """Tkinter GUI wrapper around the Whisper processing pipeline."""
+
     def __init__(self, root: tk.Tk) -> None:
+        """Initializes GUI state and widgets.
+
+        Args:
+            root (tk.Tk): Root Tkinter window.
+        """
         self.root = root
         self.root.title("Whisper Toolkit")
         self.root.geometry("900x600")
         self.root.minsize(760, 480)
 
-        self.input_path = tk.StringVar()
-        self.output_path = tk.StringVar(value="outputs")
-        self.file_progress_value = tk.IntVar(value=0)
-        self.total_progress_value = tk.IntVar(value=0)
-        self.is_running = False
-        self.ui_queue: Queue[tuple[str, tuple]] = Queue()
+        self.input_path: tk.StringVar = tk.StringVar()
+        self.output_path: tk.StringVar = tk.StringVar(value="outputs")
+        self.file_progress_value: tk.IntVar = tk.IntVar(value=0)
+        self.total_progress_value: tk.IntVar = tk.IntVar(value=0)
+        self.is_running: bool = False
+        self.ui_queue: Queue[tuple[str, tuple[object, ...]]] = Queue()
+        self.total_progressbar: ttk.Progressbar
+        self.total_progress_label: ttk.Label
+        self.start_button: ttk.Button
+        self.log_text: scrolledtext.ScrolledText
 
         self._build_ui()
         self._poll_ui_queue()
 
     def _build_ui(self) -> None:
+        """Builds the full UI layout and initializes default log state."""
         container = ttk.Frame(self.root, padding=16)
         container.pack(fill="both", expand=True)
 
@@ -90,6 +104,7 @@ class WhisperToolkitGUI:
         self.add_log("프로그램이 시작되었습니다.")
 
     def select_input_file(self) -> None:
+        """Opens a file picker and stores the selected input file path."""
         file_path = filedialog.askopenfilename(
             title="입력 파일 선택",
             filetypes=[
@@ -102,24 +117,32 @@ class WhisperToolkitGUI:
             self.add_log(f"입력 파일 선택: {file_path}")
 
     def select_output_dir(self) -> None:
+        """Opens a folder picker and stores the selected output directory."""
         dir_path = filedialog.askdirectory(title="출력 폴더 선택")
         if dir_path:
             self.output_path.set(dir_path)
             self.add_log(f"출력 폴더 선택: {dir_path}")
 
     def clear_log(self) -> None:
+        """Clears log area contents and writes a reset message."""
         self.log_text.configure(state="normal")
         self.log_text.delete("1.0", tk.END)
         self.log_text.configure(state="disabled")
         self.add_log("로그를 초기화했습니다.")
 
     def add_log(self, message: str) -> None:
+        """Appends a message to the log area.
+
+        Args:
+            message (str): Log message text.
+        """
         self.log_text.configure(state="normal")
         self.log_text.insert(tk.END, f"{message}\n")
         self.log_text.see(tk.END)
         self.log_text.configure(state="disabled")
 
     def start_process(self) -> None:
+        """Validates paths and starts background processing."""
         if self.is_running:
             self.add_log("이미 작업이 실행 중입니다.")
             return
@@ -142,6 +165,7 @@ class WhisperToolkitGUI:
         worker.start()
 
     def _run_process_worker(self) -> None:
+        """Runs transcription on a worker thread and posts UI events."""
         try:
             processed_count = process(
                 input=(self.input_path.get().strip(),),
@@ -155,7 +179,14 @@ class WhisperToolkitGUI:
             error_trace = traceback.format_exc()
             self.ui_queue.put(("error", (expt, error_trace)))
 
-    def _progress_from_worker(self, done: int, total: int, _file_path: object) -> None:
+    def _progress_from_worker(self, done: int, total: int, _file_path: Path) -> None:
+        """Receives progress updates from worker and forwards percent to UI queue.
+
+        Args:
+            done (int): Number of completed files.
+            total (int): Total number of files.
+            _file_path (Path): Current file path.
+        """
         if total <= 0:
             return
 
@@ -163,23 +194,51 @@ class WhisperToolkitGUI:
         self.ui_queue.put(("total_progress", (percent,)))
 
     def _file_status_from_worker(
-        self, status: str, done: int, total: int, file_path: object
+        self, status: str, done: int, total: int, file_path: Path
     ) -> None:
+        """Receives per-file status events from worker.
+
+        Args:
+            status (str): Event name such as "start" or "done".
+            done (int): Current completed count.
+            total (int): Total file count.
+            file_path (Path): Target file path.
+        """
         self.ui_queue.put(("file_status", (status, done, total, str(file_path))))
 
     def _log_from_worker(self, message: str) -> None:
+        """Queues log messages generated by the worker thread.
+
+        Args:
+            message (str): Log message text.
+        """
         self.ui_queue.put(("log", (message,)))
 
     def _set_file_progress(self, percent: int) -> None:
+        """Updates single-file progress value.
+
+        Args:
+            percent (int): Progress percentage in range [0, 100].
+        """
         bounded = max(0, min(100, percent))
         self.file_progress_value.set(bounded)
 
     def _set_total_progress(self, percent: int) -> None:
+        """Updates total progress value and label.
+
+        Args:
+            percent (int): Progress percentage in range [0, 100].
+        """
         bounded = max(0, min(100, percent))
         self.total_progress_value.set(bounded)
         self.total_progress_label.configure(text=f"{bounded}%")
 
     def _finish_process(self, processed_count: int) -> None:
+        """Handles successful completion state.
+
+        Args:
+            processed_count (int): Number of processed files.
+        """
         self._set_file_progress(100 if processed_count > 0 else 0)
         self._set_total_progress(100)
         self.add_log("작업이 완료되었습니다.")
@@ -187,19 +246,26 @@ class WhisperToolkitGUI:
         self.is_running = False
 
     def _handle_worker_error(self, exc: Exception, error_trace: str) -> None:
+        """Handles worker exceptions and restores UI state.
+
+        Args:
+            exc (Exception): Raised exception.
+            error_trace (str): Full traceback text.
+        """
         self.add_log(f"오류 발생: {exc}")
         self.add_log(error_trace)
         self.start_button.configure(state="normal")
         self.is_running = False
 
     def _poll_ui_queue(self) -> None:
+        """Processes queued events from worker thread and updates widgets."""
         try:
             while True:
                 event, payload = self.ui_queue.get_nowait()
                 if event == "log":
-                    self.add_log(payload[0])
+                    self.add_log(cast(str, payload[0]))
                 elif event == "total_progress":
-                    self._set_total_progress(payload[0])
+                    self._set_total_progress(cast(int, payload[0]))
                 elif event == "file_status":
                     status, done, total, file_name = payload
                     if status == "start":
@@ -208,9 +274,12 @@ class WhisperToolkitGUI:
                     elif status == "done":
                         self._set_file_progress(100)
                 elif event == "done":
-                    self._finish_process(payload[0])
+                    self._finish_process(cast(int, payload[0]))
                 elif event == "error":
-                    self._handle_worker_error(payload[0], payload[1])
+                    self._handle_worker_error(
+                        cast(Exception, payload[0]),
+                        cast(str, payload[1]),
+                    )
         except Empty:
             pass
 
@@ -218,6 +287,7 @@ class WhisperToolkitGUI:
 
 
 def main() -> None:
+    """Starts the GUI application."""
     root = tk.Tk()
     app = WhisperToolkitGUI(root)
     _ = app

@@ -97,7 +97,29 @@ def process(
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
     file_status_callback: Optional[Callable[[str, int, int, Path], None]] = None,
 ) -> int:
+    """Runs Whisper transcription for input files.
+
+    Args:
+        input (tuple[str]): Input file or directory paths.
+        output (str): Output directory path.
+        device (str): Inference device name. Uses auto-detection when set to "auto".
+        model (str): Whisper model name.
+        log_callback (Optional[Callable[[str], None]]): Optional callback for log text.
+        progress_callback (Optional[Callable[[int, int, Path], None]]):
+            Optional callback for overall progress.
+        file_status_callback (Optional[Callable[[str, int, int, Path], None]]):
+            Optional callback for per-file status updates.
+
+    Returns:
+        int: 0 if processing succeeded, 1 when no input file is found.
+
+    Examples:
+        >>> process(input=("inputs",), output="outputs", model="turbo")
+        0 # UI output is ignored on this example
+    """
+
     def emit_log(message: str) -> None:
+        """Prints and forwards log messages through callback."""
         print(message)
         if log_callback is not None:
             log_callback(message)
