@@ -134,7 +134,7 @@ def process(
             flist.append(Path(f))
 
     if not flist:
-        emit_log("처리할 입력 파일이 없습니다.")
+        emit_log("No input file was provided.")
         return 1
 
     Path(output).joinpath("json").mkdir(exist_ok=True, parents=True)
