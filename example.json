@@ -1,0 +1,8 @@
+{
+    "model": "turbo",
+    "device": "mps",
+    "input": [
+        "test.opus"
+    ],
+    "output": "outputs"
+}
