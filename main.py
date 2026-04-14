@@ -7,7 +7,7 @@ import time
 import warnings
 from pathlib import Path
 from collections.abc import Callable
-from typing import Optional
+from typing import Optional, TypedDict
 
 import torch
 import whisper
@@ -15,6 +15,40 @@ import whisper.utils
 from tqdm import TqdmExperimentalWarning
 from tqdm.rich import tqdm
 from whisper.model import Whisper
+
+
+class JsonOpts(TypedDict):
+    """
+    Defines input argument types for JSON mode.
+    """
+
+    input: tuple[str]
+    output: str
+    device: str
+    model: str
+
+
+class FileResult:
+    name: str
+    success: bool
+    elapsedTime: float
+    outputPath: str
+
+    def __init__(self, name, success, elapsedTime, outputPath):
+        self.name = name
+        self.success = success
+        self.elapsedTime = elapsedTime
+        self.outputPath = outputPath
+
+
+class ResultOutput:
+    files: list[FileResult]
+    model: str
+    error: str
+
+    def __init__(self, model):
+        self.files = list()
+        self.model = model
 
 
 def get_args() -> argparse.Namespace:
@@ -51,6 +85,10 @@ def get_args() -> argparse.Namespace:
         default="inputs",
         help='Specifies output files/folders. if not provided, it uses "inputs".',
     )
+    parser.add_argument(
+        "--json",
+        help="Use JSON mode. Takes options as JSON, And output message will be JSON.",
+    )
     return parser.parse_args()
 
 
@@ -85,7 +123,20 @@ def main() -> None:
     """
     warnings.filterwarnings("ignore", category=TqdmExperimentalWarning)
     args: argparse.Namespace = get_args()
-    process(input=args.input, output=args.output, device=args.device, model=args.model)
+
+    if args.json:
+        jsonOpts: JsonOpts = json.loads(args.json)
+        process(
+            input=jsonOpts["input"] if jsonOpts["input"] else ("inputs",),
+            output=jsonOpts["output"] if jsonOpts["output"] else "outputs",
+            device=jsonOpts["device"] if jsonOpts["device"] else "auto",
+            model=jsonOpts["model"] if jsonOpts["model"] else "turbo",
+            jsonMode=True,
+        )
+    else:
+        process(
+            input=args.input, output=args.output, device=args.device, model=args.model
+        )
 
 
 def process(
@@ -93,6 +144,7 @@ def process(
     output: str = "outputs",
     device: str = "auto",
     model: str = "turbo",
+    jsonMode: bool = False,
     log_callback: Optional[Callable[[str], None]] = None,
     progress_callback: Optional[Callable[[int, int, Path], None]] = None,
     file_status_callback: Optional[Callable[[str, int, int, Path], None]] = None,
@@ -104,6 +156,7 @@ def process(
         output (str): Output directory path.
         device (str): Inference device name. Uses auto-detection when set to "auto".
         model (str): Whisper model name.
+        jsonMode (bool): Whether to use JSON mode(output as JSON). for LLMs.
         log_callback (Optional[Callable[[str], None]]): Optional callback for log text.
         progress_callback (Optional[Callable[[int, int, Path], None]]):
             Optional callback for overall progress.
@@ -120,9 +173,14 @@ def process(
 
     def emit_log(message: str) -> None:
         """Prints and forwards log messages through callback."""
-        print(message)
-        if log_callback is not None:
-            log_callback(message)
+        if jsonMode:
+            return
+        else:
+            print(message)
+            if log_callback is not None:
+                log_callback(message)
+
+    jsonResult = ResultOutput(model)
 
     flist: list[Path] = []
     for f in input:
@@ -134,6 +192,8 @@ def process(
             flist.append(Path(f))
 
     if not flist:
+        if jsonMode:
+            jsonResult.error = "No input file was provided."
         emit_log("No input file was provided.")
         return 1
 
@@ -149,13 +209,23 @@ def process(
     whisper_model: Whisper = whisper.load_model(model, device=dev)
 
     total_files = len(flist)
-    for idx, filePath in enumerate(tqdm(flist, position=1), start=1):
+
+    iterator: enumerate[Path] = (
+        enumerate(flist, start=1)
+        if jsonMode
+        else enumerate(tqdm(flist, position=1), start=1)
+    )
+
+    for idx, filePath in iterator:
         if file_status_callback is not None:
             file_status_callback("start", idx, total_files, filePath)
 
         emit_log(f"Running inference for {filePath.name}... ({idx}/{total_files})")
         startTime: float = time.perf_counter()
-        result = whisper_model.transcribe(str(filePath.resolve()), verbose=False)
+        if not jsonMode:
+            result = whisper_model.transcribe(str(filePath.resolve()), verbose=False)
+        else:
+            result = whisper_model.transcribe(str(filePath.resolve()))
 
         with open(
             os.path.join(output, "json", f"opt{idx}.json"),
@@ -169,7 +239,22 @@ def process(
             "srt",
             os.path.join(output, "srt"),
         )
-        writer(result, filePath, {})
+        writer(result, filePath, {})  # ty:ignore[invalid-argument-type]
+
+        jsonResult.files.append(
+            FileResult(
+                str(filePath),
+                True,
+                time.perf_counter() - startTime,
+                os.path.join(output, "srt", f"{filePath.stem}.srt"),
+            )
+        )
+
+        if jsonMode:
+            print(
+                json.dumps(jsonResult, ensure_ascii=False, default=lambda x: x.__dict__)
+            )
+
         emit_log(
             f"File {idx} processing completed. took {time.perf_counter() - startTime:.2f}s"
         )
