@@ -107,7 +107,6 @@ def get_available_device() -> torch.device:
     >>> get_available_device() # When GPU is unavailable
         device(type='cpu')
     """
-    dev = str()
     if torch.cuda.is_available():
         dev = "cuda"
     elif torch.backends.mps.is_available():
