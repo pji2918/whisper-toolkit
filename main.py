@@ -126,10 +126,10 @@ def main() -> None:
     if args.json:
         jsonOpts: JsonOpts = json.loads(args.json)
         process(
-            input=jsonOpts["input"] if jsonOpts["input"] else ("inputs",),
-            output=jsonOpts["output"] if jsonOpts["output"] else "outputs",
-            device=jsonOpts["device"] if jsonOpts["device"] else "auto",
-            model=jsonOpts["model"] if jsonOpts["model"] else "turbo",
+            input=jsonOpts.get("input", ("inputs",)),
+            output=jsonOpts.get("output", "outputs"),
+            device=jsonOpts.get("device", "auto"),
+            model=jsonOpts.get("model", "turbo"),
             jsonMode=True,
         )
     else:
