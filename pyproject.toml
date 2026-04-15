@@ -15,3 +15,9 @@ dev = [
     "ruff>=0.15.9",
     "ty>=0.0.29",
 ]
+
+[tool.ty.src]
+exclude = [".agents/skills/**"]
+
+[tool.ruff]
+exclude = [".agents/skills/**"]
